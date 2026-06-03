@@ -1,3 +1,4 @@
+import java.awt.*;
 import java.awt.event.*;
 
 public class MouseHandler implements MouseListener, MouseMotionListener {
@@ -17,6 +18,7 @@ public class MouseHandler implements MouseListener, MouseMotionListener {
         int b = e.getButton();
         if (b < held.length) { held[b] = false; justReleased[b] = true; }
     }
+    public synchronized Point getPosition() { return new Point(x, y); }
     @Override public void mouseMoved(MouseEvent e)   { x = e.getX(); y = e.getY(); }
     @Override public void mouseDragged(MouseEvent e) { x = e.getX(); y = e.getY(); }
     @Override public void mouseClicked(MouseEvent e)  {}
