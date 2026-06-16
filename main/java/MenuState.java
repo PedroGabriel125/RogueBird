@@ -7,6 +7,7 @@ public class MenuState implements GameState {
     private int tick;
     private boolean blink = true;
     private int highScore;
+    private Rectangle btnLoja = new Rectangle(148, 430, 100, 50);
 
     public MenuState(Game game)         { this(game, 0); }
     public MenuState(Game game, int hi) { this.game = game; this.highScore = hi; }
@@ -17,11 +18,23 @@ public class MenuState implements GameState {
     @Override
     public void update() {
         if (++tick % 35 == 0) blink = !blink;
-        if (game.keys.isJustPressed(KeyEvent.VK_SPACE)
-         || game.keys.isJustPressed(KeyEvent.VK_ENTER)
-         || game.mouse.isJustPressed(MouseHandler.LEFT))
-            game.setState(new PlayState(game));
+
+        Point p = game.mouse.getPosition();
+        boolean click = game.mouse.isJustPressed(MouseHandler.LEFT);
+
+        if (click && btnLoja.contains(p))
+    {
+        game.setState(new ShopState(game));
     }
+    else if (game.keys.isJustPressed(KeyEvent.VK_SPACE)
+          || game.keys.isJustPressed(KeyEvent.VK_ENTER)
+          || (p != null &&
+              click &&
+              !btnLoja.contains(p)))
+    {
+        game.setState(new PlayState(game));
+    }
+}
 
     @Override
     public void render(Graphics2D g, float alpha) {
@@ -51,7 +64,16 @@ public class MenuState implements GameState {
         g.setColor(new Color(255, 220, 0));
         g.drawString(title, cx - fm.stringWidth(title) / 2, 160);
 
+        //Shop button (temporary) -----------------------------------------------
+           String botão = "LOJA";
+            g.setFont(new Font("Arial" ,Font.PLAIN , 25));
+            fm = g.getFontMetrics();
+            g.setColor(new Color(255, 220, 0));
+            g.fill(btnLoja);
+            g.setColor(new Color(80, 40, 0));
+            g.drawString(botão, 165, 460);
 
+        
         // ── Prompt ────────────────────────────────────────────────────────
         if (blink) {
             g.setFont(new Font("Arial", Font.BOLD, 18));
@@ -69,5 +91,6 @@ public class MenuState implements GameState {
             g.setColor(Color.WHITE);
             g.drawString(hi, cx - fm.stringWidth(hi) / 2, 370);
         }
+            
     }
 }
