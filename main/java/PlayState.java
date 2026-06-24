@@ -46,6 +46,12 @@ public class PlayState implements GameState {
     private int score, coinScore, tickCount, deadTimer;
     private boolean dead;
 
+    //── Míssil ────────────────────────────────────────────────────────
+    private Missile missile;
+    private int lastMissileScore = 0;
+
+
+
     public PlayState(Game game) {
         this.game = game;
     }
@@ -174,6 +180,17 @@ public class PlayState implements GameState {
 
                 defineNextBossScore();
             }
+        //chama míssil ────────────────────────────────────────────────────────
+        if(score != 0 && score%10 == 0 && score != lastMissileScore){
+            
+            missile = new Missile(birdY, game.width, score);
+            lastMissileScore = score;
+
+        }
+
+       //atualiza míssil ────────────────────────────────────────────────────────
+        if(missile != null){
+            missile.update();
         }
 
         groundScroll = (groundScroll + PIPE_SPD) % 30;
@@ -300,6 +317,12 @@ public class PlayState implements GameState {
         g.setColor(new Color(210, 170, 80));
         g.fillRect(0, groundTop, game.width, GROUND_H);
         // TODO: sprite
+
+        // ── míssil ───────────────────────────────────────────────────────
+        if(missile != null){
+            missile.render(g);
+        }
+
         // ── Bird (interpolated) ───────────────────────────────────────────
         float ry = prevBirdY + (birdY - prevBirdY) * alpha;
         int bx = BIRD_X - BIRD_W / 2;
