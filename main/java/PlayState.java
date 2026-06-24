@@ -31,6 +31,13 @@ public class PlayState implements GameState {
     private static final int COIN_SIZE = 30;
     private static final int COIN_MARGIN = 30;
 
+    // ── Boss ─────────────────────────────────────────────────────────────
+    private Boss boss;
+    private boolean bossFight;
+    private boolean bossSpawned;
+    private static final int BOSS_SCORE_TRIGGER = 5;
+    private int nextBossScore;
+    private int bossLevel;
     // ── chão ────────────────────────────────────────────────────────────
     public static final int GROUND_H = 60;
     private float groundScroll;
@@ -60,6 +67,11 @@ public class PlayState implements GameState {
         pipesUntilNextCoin = 4 + rng.nextInt(3);
         dead = false;
         groundScroll = 0;
+        boss = null;
+        bossFight = false;
+        bossSpawned = false;
+        nextBossScore = 19; // spawn do primeiro boss após 19 pontos (diminuir para testes)
+        bossLevel = 1;
     }
 
     @Override
@@ -83,6 +95,10 @@ public class PlayState implements GameState {
 
         tickCount++;
 
+        if (!bossFight && score >= nextBossScore) {
+            bossFight = true;
+        }
+
         if (flapPressed()) {
             birdVel = FLAP;
             birdAngle = -25;
@@ -93,7 +109,7 @@ public class PlayState implements GameState {
         birdY += birdVel;
         birdAngle = Math.min(birdAngle + 3, 60);
 
-        if (tickCount % PIPE_FREQ == 0) {
+        if (!bossFight && tickCount % PIPE_FREQ == 0) {
             int gapY = 120 + rng.nextInt(
                     game.height - GROUND_H - 120 - GAP);
 
@@ -130,6 +146,40 @@ public class PlayState implements GameState {
                 coins.remove(i);
         }
 
+        // spawn do boss
+        if (bossFight && !bossSpawned && pipes.isEmpty()) {
+
+            int bossSize = BIRD_W * 2;
+
+            boss = new Boss(
+                    game.width + 50, // nasce fora da tela
+                    200,
+                    bossSize - 10,
+                    bossSize,
+                    game.width - 100,
+                    game.height / 2,
+                    bossLevel);
+
+            bossSpawned = true;
+            System.out.println(
+                    "Boss nasceu com "
+                            + boss.getCurrentHealth()
+                            + "/"
+                            + boss.getMaxHealth());
+
+        }
+
+        // entrada do boss
+        if (boss != null) {
+            boss.updat(BIRD_X, (int) birdY);
+            if (bossSpawned && boss != null && boss.hasFinishedDeathAnimation()) {
+                bossLevel++;
+                boss = null;
+                bossFight = false;
+                bossSpawned = false;
+
+                defineNextBossScore();
+            }
         //chama míssil ────────────────────────────────────────────────────────
         if(score != 0 && score%10 == 0 && score != lastMissileScore){
             
@@ -149,16 +199,41 @@ public class PlayState implements GameState {
         int bx = BIRD_X - BIRD_W / 2, by = (int) birdY - BIRD_H / 2;
         Rectangle birdRect = new Rectangle(bx + 3, by + 3, BIRD_W - 6, BIRD_H - 6); // slight inset
 
-        //colisão do míssil ────────────────────────────────────────────────────────
-        if(missile != null){
-            Rectangle missileColide = missile.getBounds();
+        // colisão com o laser do boss
+        if (boss != null) {
+            Shape laserHitbox = boss.getLaserHitbox();
 
-            if(birdRect.intersects(missileColide)){
-                die();
-                return;
+            if (laserHitbox != null && !boss.hasLaserHit() && laserHitbox.intersects(
+                    birdRect.getX(),
+                    birdRect.getY(),
+                    birdRect.getWidth(),
+                    birdRect.getHeight())) {
+
+                boss.markLaserHit();
+                System.out.println(
+                        "LASER ACERTOU - DANO: "
+                                + boss.getLaserDamage()); // substituir por função de dano
             }
         }
 
+        // colisão com fireballs do boss
+        if (boss != null) {
+
+            for (int i = boss.getFireball().size() - 1; i >= 0; i--) {
+
+                Fireball fireball = boss.getFireball().get(i);
+
+                if (birdRect.intersects(
+                        fireball.getBounds())) {
+
+                    System.out.println(
+                            "FIREBALL ACERTOU - DANO: "
+                                    + boss.getFireballDamage());
+
+                    boss.getFireball().remove(i);
+                }
+            }
+        }
 
         // colisão com moedas
         for (int i = coins.size() - 1; i >= 0; i--) {
@@ -184,6 +259,10 @@ public class PlayState implements GameState {
             return;
         }
 
+        if (bossSpawned && boss != null && tickCount % 60 == 0) { // dano do boss a cada segundo TEMPORARIO
+            boss.takeDamage(1);
+        }
+
         for (int[] p : pipes) {
             int px = p[0], gapY = p[1];
             Rectangle top = new Rectangle(px, 0, PIPE_W, gapY);
@@ -193,6 +272,11 @@ public class PlayState implements GameState {
                 return;
             }
         }
+    }
+
+    private void defineNextBossScore() {
+        nextBossScore = score + 17 + rng.nextInt(7); // próximo boss spawnará entre 17 e 23 pontos após o último (abaixe
+                                                    // o 17 para testes)
     }
 
     private void die() {
@@ -222,6 +306,11 @@ public class PlayState implements GameState {
             // Bottom pipe
             g.fillRect(px, gapY + GAP, PIPE_W, game.height - (gapY + GAP));
             // TODO: replace with pipe-bottom sprite
+        }
+
+        // ── Boss ─────────────────────────────────────────────────────────────
+        if (bossSpawned && boss != null) {
+            boss.render(g);
         }
 
         // ── chão ────────────────────────────────────────────────────────
@@ -257,13 +346,39 @@ public class PlayState implements GameState {
         }
 
         // ── Score ─────────────────────────────────────────────────────────
+
         g.setFont(new Font("Arial", Font.BOLD, 36));
         FontMetrics fm = g.getFontMetrics();
         String sc = String.valueOf(score);
         g.setColor(new Color(0, 0, 0, 80));
-        g.drawString(sc, game.width / 2 - fm.stringWidth(sc) / 2 + 2, 62);
-        g.setColor(Color.WHITE);
-        g.drawString(sc, game.width / 2 - fm.stringWidth(sc) / 2, 60);
+
+        if (!bossSpawned) { // não mostrar score durante a luta com o boss
+            g.drawString(sc, game.width / 2 - fm.stringWidth(sc) / 2 + 2, 62);
+            g.setColor(Color.WHITE);
+            g.drawString(sc, game.width / 2 - fm.stringWidth(sc) / 2, 60);
+        }
+
+        // ── Boss Health Bar ───────────────────────────────────────────────
+        if (bossSpawned && boss != null) {
+
+            int barWidth = 260;
+            int barHeight = 20;
+
+            int x = game.width / 2 - barWidth / 2;
+            int y = 35;
+
+            g.setColor(Color.GRAY);
+            g.fillRect(x, y, barWidth, barHeight);
+
+            int currentWidth = boss.getCurrentHealth() * barWidth
+                    / boss.getMaxHealth();
+
+            g.setColor(Color.RED);
+            g.fillRect(x, y, currentWidth, barHeight);
+
+            g.setColor(Color.WHITE);
+            g.drawRect(x, y, barWidth, barHeight);
+        }
 
         // ── Coin Score ───────────────────────────────────────────────────
         g.setFont(new Font("Arial", Font.BOLD, 20));
