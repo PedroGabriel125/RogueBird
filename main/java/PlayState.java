@@ -26,6 +26,14 @@ public class PlayState implements GameState {
     private float birdY, birdVel, prevBirdY;
     private double birdAngle;
     private static final float GRAVITY = 0.45f;
+    private static final float FLAP = -8.5f;
+    public static final int BIRD_X = 80;
+    public static final int BIRD_W = 34;
+    public static final int BIRD_H = 24;
+    private Bird bird;
+    private ArrayList<BirdBullet> birdBullets;
+    private long lastShotTime;
+    private static final long SHOT_COOLDOWN = 250;
     private static final float FLAP    = -8.5f;
 
     // ── Pipes ─────────────────────────────────────────────────────────────
@@ -52,6 +60,16 @@ public class PlayState implements GameState {
     private int nextBossScore;
     private int bossLevel;
 
+    // ── Estado do jogo ────────────────────────────────────────────────────────
+    private int score, coinScore, tickCount, deadTimer;
+    private boolean dead;
+
+    // ── Míssil ────────────────────────────────────────────────────────
+    private Missile missile;
+    private int lastMissileScore = 0;
+
+    public PlayState(Game game) {
+        this.game = game;
     // ── Missile ───────────────────────────────────────────────────────────
     private Missile missile;
     private int lastMissileScore = 0;
@@ -97,6 +115,9 @@ public class PlayState implements GameState {
         bossSpawned = false;
         nextBossScore = 19;
         bossLevel = 1;
+        bird = new Bird();
+        birdBullets = new ArrayList<>();
+        lastShotTime = 0;
     }
 
     @Override public void onExit() {}
@@ -121,6 +142,28 @@ public class PlayState implements GameState {
         if (flapPressed()) {
             birdVel = FLAP;
             birdAngle = -25;
+        }
+        // ativar escudo com shift
+        if (game.keys.isJustPressed(KeyEvent.VK_SHIFT)|| game.mouse.isJustPressed(MouseHandler.MIDDLE)) {
+            bird.activateShield();
+        }
+
+        long now = System.currentTimeMillis();
+        
+        // atirar com o botão direito do mouse
+        if (game.mouse.isJustPressed(MouseHandler.RIGHT)
+                || game.keys.isJustPressed(KeyEvent.VK_ENTER)
+                        && now - lastShotTime >= SHOT_COOLDOWN) {
+            birdBullets.add(new BirdBullet(BIRD_X + BIRD_W / 2, birdY));
+            lastShotTime = now; // atualiza o tempo do último tiro
+        }
+
+        for (int i = birdBullets.size() - 1; i >= 0; i--) {
+            BirdBullet bullet = birdBullets.get(i);
+            bullet.update();
+            if (bullet.isOffScreen(game.width)) {
+                birdBullets.remove(i);
+            }
         }
 
         prevBirdY  = birdY;
@@ -189,6 +232,9 @@ public class PlayState implements GameState {
                 defineNextBossScore();
             }
         }
+        // chama míssil ────────────────────────────────────────────────────────
+        if (score != 0 && score % 5 == 0 && score != lastMissileScore) {
+
 
         // ── Spawn missile ─────────────────────────────────────────────────
         if (score != 0 && score % 10 == 0 && score != lastMissileScore) {
@@ -196,6 +242,7 @@ public class PlayState implements GameState {
             lastMissileScore = score;
         }
 
+        // atualiza míssil ────────────────────────────────────────────────────────
         // ── Update missile ────────────────────────────────────────────────
         if (missile != null) {
             missile.update();
@@ -212,6 +259,10 @@ public class PlayState implements GameState {
                     birdRect.getX(), birdRect.getY(),
                     birdRect.getWidth(), birdRect.getHeight())) {
                 boss.markLaserHit();
+                bird.takeDamage(boss.getLaserDamage());
+                System.out.println(
+                        "LASER ACERTOU - DANO: "
+                                + boss.getLaserDamage()); // substituir por função de dano
                 System.out.println("LASER ACERTOU - DANO: " + boss.getLaserDamage());
             }
         }
@@ -220,6 +271,14 @@ public class PlayState implements GameState {
         if (boss != null) {
             for (int i = boss.getFireball().size() - 1; i >= 0; i--) {
                 Fireball fireball = boss.getFireball().get(i);
+
+                if (birdRect.intersects(fireball.getBounds())) {
+                    bird.takeDamage(boss.getFireballDamage());
+
+                    System.out.println(
+                            "FIREBALL ACERTOU - DANO: "
+                                    + boss.getFireballDamage());
+
                 if (birdRect.intersects(fireball.getBounds())) {
                     System.out.println("FIREBALL ACERTOU - DANO: " + boss.getFireballDamage());
                     boss.getFireball().remove(i);
@@ -227,6 +286,23 @@ public class PlayState implements GameState {
             }
         }
 
+        // Bird balas atingindo o boss
+        if (boss != null) {
+            for (int i = birdBullets.size() - 1; i >= 0; i--) {
+
+                BirdBullet bullet = birdBullets.get(i);
+
+                if (bullet.getBounds().intersects(boss.getBounds())) {
+                    System.err.println(
+                            "BIRD ACERTOU - DANO: "
+                                    + bird.getBulletDamage());
+                    boss.takeDamage(bird.getBulletDamage());
+                    birdBullets.remove(i);
+                }
+            }
+        }
+
+        // colisão com moedas
         // ── Coin collection ───────────────────────────────────────────────
         for (int i = coins.size() - 1; i >= 0; i--) {
             int[] coin = coins.get(i);
@@ -238,6 +314,25 @@ public class PlayState implements GameState {
                 game.coins++;
                 coins.remove(i);
             }
+        }
+
+        // colisão com o míssil
+        if (missile != null) {
+
+            if (birdRect.intersects(
+                    missile.getBounds())) {
+                bird.takeDamage(1);
+                missile = null;
+            }
+        }
+
+        if (birdY - BIRD_H / 2f < 0) {
+            birdY = BIRD_H / 2f;
+            birdVel = 0;
+        }
+        if (birdY + BIRD_H / 2f >= game.height - GROUND_H) {
+            die();
+            return;
         }
 
         // ── Boundary checks ───────────────────────────────────────────────
@@ -257,11 +352,19 @@ public class PlayState implements GameState {
                 die(); return;
             }
         }
+
+        // morte do pássaro
+        if (bird.isDead()) {
+            die();
+            return;
+        }
     }
 
     private void die() { dead = true; deadTimer = 0; birdVel = -5; }
 
     private void defineNextBossScore() {
+        nextBossScore = score + 16 + rng.nextInt(7); // próximo boss spawnará entre 17 e 23 pontos após o último (abaixe
+                                                     // o 17 para testes)
         nextBossScore = score + 17 + rng.nextInt(7);
     }
 
@@ -388,6 +491,12 @@ public class PlayState implements GameState {
             boss.render(g);
         }
 
+        // ── chão ────────────────────────────────────────────────────────
+        g.setColor(new Color(210, 170, 80));
+        g.fillRect(0, groundTop, game.width, GROUND_H);
+        // TODO: sprite
+
+        // ── míssil ───────────────────────────────────────────────────────
         // ── Missile ───────────────────────────────────────────────────────
         if (missile != null) {
             missile.render(g);
@@ -400,7 +509,12 @@ public class PlayState implements GameState {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.rotate(Math.toRadians(birdAngle), BIRD_X, ry);
-        g2.setColor(new Color(255, 200, 0));
+        if (bird.isShieldActive()) {
+            g2.setColor(new Color(173, 216, 230)); // azul bebê
+        } else {
+            g2.setColor(new Color(255, 200, 0)); // amarelo normal
+        }
+
         g2.fillRect(bx, by, BIRD_W, BIRD_H);
         drawSkin(g2, bx, by);
         g2.dispose();
@@ -451,6 +565,51 @@ public class PlayState implements GameState {
             g.drawString("+" + coinsThisRun + " esta run", 10, 43);
         }
 
+        // ── bird tools ───────────────────────────────────────────────
+        int lifeBarWidth = 120;
+        int lifeBarHeight = 15;
+
+        int lifeBarX = game.width - lifeBarWidth - 10;
+        int lifeBarY = 10;
+
+        g.setColor(Color.GRAY);
+        g.fillRect(
+                lifeBarX,
+                lifeBarY,
+                lifeBarWidth,
+                lifeBarHeight);
+
+        int currentLifeWidth = bird.getCurrentHealth()
+                * lifeBarWidth
+                / bird.getMaxHealth();
+
+        g.setColor(new Color(144, 238, 144)); // verde clarinho
+
+        g.fillRect(
+                lifeBarX,
+                lifeBarY,
+                currentLifeWidth,
+                lifeBarHeight);
+
+        g.setColor(Color.WHITE);
+
+        g.drawRect(
+                lifeBarX,
+                lifeBarY,
+                lifeBarWidth,
+                lifeBarHeight);
+
+        if (bird.isShieldActive()) {
+            int shieldWidth = bird.getShieldHealth()
+                    * lifeBarWidth
+                    / bird.getMaxShieldhealth();
+        }
+
+        for (BirdBullet bullet : birdBullets) {
+            bullet.render(g);
+        }
+
+        // ── overlay ─────────────────────────────────────────────
         // ── Game-over overlay ─────────────────────────────────────────────
         if (dead) {
             g.setColor(new Color(0, 0, 0, 120));
