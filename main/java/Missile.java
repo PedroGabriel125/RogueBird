@@ -1,10 +1,15 @@
 import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import javax.imageio.ImageIO;
+
 public class Missile {
 
     private float x, y;
     private float mSpeed;
     private boolean activeAlert;
     private int alertTimer;
+    private BufferedImage sprite;
 
 
     Missile(float birdY, int width, int score){
@@ -14,7 +19,13 @@ public class Missile {
         activeAlert = true;
         alertTimer = 20;
         Math.min(mSpeed, 23);
+        try {
+        sprite = ImageIO.read(getClass().getResource("/recursos/sprites/Missile.png"));
+        } catch (IOException e) {
+        e.printStackTrace();
+        }
     }
+    
 
     void update(){
         if(activeAlert){
@@ -39,8 +50,7 @@ public class Missile {
         }
 
         if(!activeAlert){
-            g.setColor(Color.WHITE);
-            g.fillRect((int)x, (int)y, 40, 20);
+            g.drawImage(sprite, (int)x, (int)y, 40, 20, null);
         }
 
     }

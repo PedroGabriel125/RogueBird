@@ -63,6 +63,9 @@ public class PlayState implements GameState {
     // ── Game state ────────────────────────────────────────────────────────
     private int score, tickCount, deadTimer;
     private boolean dead;
+    public PlayState(Game game) {
+        this.game = game;
+    }
 
     // ── Sprites ───────────────────────────────────────────────────────────
     private BufferedImage imgBackground;
@@ -133,6 +136,7 @@ public class PlayState implements GameState {
             birdVel = FLAP;
             birdAngle = -25;
         }
+
         // ativar escudo com shift
         if (game.keys.isJustPressed(KeyEvent.VK_SHIFT) || game.mouse.isJustPressed(MouseHandler.MIDDLE)) {
             bird.activateShield();
@@ -142,6 +146,8 @@ public class PlayState implements GameState {
 
         // atirar com o botão direito do mouse
         if ((game.mouse.isJustPressed(MouseHandler.RIGHT) || game.keys.isJustPressed(KeyEvent.VK_ENTER))
+        if ((game.mouse.isJustPressed(MouseHandler.RIGHT)
+                || game.keys.isJustPressed(KeyEvent.VK_ENTER))
                 && now - lastShotTime >= SHOT_COOLDOWN) {
             birdBullets.add(new BirdBullet(BIRD_X + BIRD_W / 2, birdY));
             lastShotTime = now; // atualiza o tempo do último tiro
@@ -170,11 +176,12 @@ public class PlayState implements GameState {
             int gapY = 120 + rng.nextInt(game.height - GROUND_H - 120 - GAP);
             pipes.add(new int[] { game.width + 10, gapY });
 
+            pipes.add(new int[]{game.width + 10, gapY});
             pipesUntilNextCoin--;
             if (pipesUntilNextCoin <= 0) {
                 int coinY = gapY + COIN_MARGIN
                         + rng.nextInt(GAP - 2 * COIN_SIZE - COIN_MARGIN);
-                coins.add(new int[] { game.width + 10 + PIPE_W / 2, coinY });
+                coins.add(new int[]{game.width + 10 + PIPE_W / 2, coinY});
                 pipesUntilNextCoin = 5 + rng.nextInt(6);
             }
         }
@@ -195,7 +202,7 @@ public class PlayState implements GameState {
                 coins.remove(i);
         }
 
-        groundScroll = (groundScroll + PIPE_SPD) % game.width;
+        groundScroll = ((groundScroll + PIPE_SPD) % game.width)-1;
 
         // ── Spawn boss ────────────────────────────────────────────────────
         if (bossFight && !bossSpawned && pipes.isEmpty()) {
@@ -225,14 +232,13 @@ public class PlayState implements GameState {
             }
         }
 
-        // chama míssil ────────────────────────────────────────────────────────
+        // ── Spawn missile ─────────────────────────────────────────────────
         if (score != 0 && score % 10 == 0 && score != lastMissileScore) {
 
             missile = new Missile(birdY, game.width, score);
             lastMissileScore = score;
         }
 
-        // atualiza míssil ────────────────────────────────────────────────────────
         // ── Update missile ────────────────────────────────────────────────
         if (missile != null) {
             missile.update();
@@ -250,9 +256,6 @@ public class PlayState implements GameState {
                     birdRect.getWidth(), birdRect.getHeight())) {
                 boss.markLaserHit();
                 bird.takeDamage(boss.getLaserDamage());
-                System.out.println(
-                        "LASER ACERTOU - DANO: "
-                                + boss.getLaserDamage()); // substituir por função de dano
                 System.out.println("LASER ACERTOU - DANO: " + boss.getLaserDamage());
             }
         }
@@ -261,36 +264,27 @@ public class PlayState implements GameState {
         if (boss != null) {
             for (int i = boss.getFireball().size() - 1; i >= 0; i--) {
                 Fireball fireball = boss.getFireball().get(i);
-
                 if (birdRect.intersects(fireball.getBounds())) {
                     bird.takeDamage(boss.getFireballDamage());
-
-                    System.out.println(
-                            "FIREBALL ACERTOU - DANO: "
-                                    + boss.getFireballDamage());
+                    System.out.println("FIREBALL ACERTOU - DANO: " + boss.getFireballDamage());
                     boss.getFireball().remove(i);
                     
                 }
             }
         }
 
-        // Bird balas atingindo o boss
+        // Bird bullets hitting the boss
         if (boss != null) {
             for (int i = birdBullets.size() - 1; i >= 0; i--) {
-
                 BirdBullet bullet = birdBullets.get(i);
-
                 if (bullet.getBounds().intersects(boss.getBounds())) {
-                    System.err.println(
-                            "BIRD ACERTOU - DANO: "
-                                    + bird.getBulletDamage());
+                    System.err.println("BIRD ACERTOU - DANO: " + bird.getBulletDamage());
                     boss.takeDamage(bird.getBulletDamage());
                     birdBullets.remove(i);
                 }
             }
         }
 
-        // colisão com moedas
         // ── Coin collection ───────────────────────────────────────────────
         for (int i = coins.size() - 1; i >= 0; i--) {
             int[] coin = coins.get(i);
@@ -306,15 +300,13 @@ public class PlayState implements GameState {
 
         // colisão com o míssil
         if (missile != null) {
-
-            if (birdRect.intersects(
-                    missile.getBounds())) {
+            if (birdRect.intersects(missile.getBounds())) {
                 bird.takeDamage(1);
                 missile = null;
             }
         }
 
-        // ── Boundary checks ───────────────────────────────────────────────
+        // Boundary checks
         if (birdY - BIRD_H / 2f < 0) {
             birdY = BIRD_H / 2f;
             birdVel = 0;
@@ -324,11 +316,16 @@ public class PlayState implements GameState {
             return;
         }
 
+        // ── Temp boss damage (1/sec) ──────────────────────────────────────
+        if (bossSpawned && boss != null && tickCount % 60 == 0) {
+            boss.takeDamage(1);
+        }
+
         // ── Pipe collision ────────────────────────────────────────────────
         for (int[] p : pipes) {
             int px = p[0], gapY = p[1];
             if (birdRect.intersects(new Rectangle(px, 0, PIPE_W, gapY)) ||
-                    birdRect.intersects(new Rectangle(px, gapY + GAP, PIPE_W, game.height))) {
+                birdRect.intersects(new Rectangle(px, gapY + GAP, PIPE_W, game.height))) {
                 die();
                 return;
             }
@@ -340,12 +337,8 @@ public class PlayState implements GameState {
             return;
         }
     }
-
-    private void die() {
-        dead = true;
-        deadTimer = 0;
-        birdVel = -5;
-    }
+  
+    private void die() { dead = true; deadTimer = 0; birdVel = -5; }
 
     private void defineNextBossScore() {
         nextBossScore = score + 17 + rng.nextInt(7); // próximo boss spawnará entre 17 e 23 pontos após o último (abaixe
@@ -483,11 +476,6 @@ public class PlayState implements GameState {
         if (bossSpawned && boss != null) {
             boss.render(g);
         }
-
-        // ── chão ────────────────────────────────────────────────────────
-        g.setColor(new Color(210, 170, 80));
-        g.fillRect(0, groundTop, game.width, GROUND_H);
-        // TODO: sprite
 
         // ── míssil ───────────────────────────────────────────────────────
         // ── Missile ───────────────────────────────────────────────────────
